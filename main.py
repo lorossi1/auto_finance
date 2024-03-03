@@ -1,3 +1,4 @@
+
 ########################################
 #         Data Import from Sheets      #
 ########################################
@@ -13,18 +14,22 @@ from dotenv import load_dotenv
 import os
 import mimetypes
 from pathlib import Path
+import json
 
 load_dotenv()
+email_username = os.getenv('EMAIL_USERNAME')
 email_password = os.getenv('EMAIL_PASSWORD')
 
 # Set up credentials
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('C:/Users/lohan/PythonProjects/3 - Finances/finances-411402-17fda5da6f27.json', scope)
+# creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('TRY'), scope)
+json_keyfile_dict = json.loads(os.getenv('JSON_KEYFILE_DICT'))
+creds = ServiceAccountCredentials.from_json_keyfile_dict(json_keyfile_dict, scope)
 client = gspread.authorize(creds)
 
 
 # Open Spreadsheet based on sheet key
-spreadsheet_key = '1K-EDM6ETO7yH-x-yFHSdqgxGxTufGSboxYvvpZF1nKo'
+spreadsheet_key = os.getenv('SPREADSHEET_KEY')
 spreadsheet = client.open_by_key(spreadsheet_key)
 
 
@@ -731,7 +736,7 @@ with open(comparison_per_month, 'rb') as img:
 
 smtp_server = 'smtp.office365.com'
 port = 587  # For TLS
-username = 'lohan.rossi@hotmail.com'
+username = email_username
 password = email_password
 
 # Connect to the server
