@@ -10,26 +10,24 @@ import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
 import smtplib
 from email.message import EmailMessage
-from dotenv import load_dotenv
 import os
 import mimetypes
 from pathlib import Path
 import json
 
-load_dotenv()
-email_username = os.getenv('EMAIL_USERNAME')
-email_password = os.getenv('EMAIL_PASSWORD')
+email_username = os.environ["EMAIL_USERNAME"]
+email_password = os.environ["EMAIL_PASSWORD"]
 
 # Set up credentials
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 # creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('TRY'), scope)
-json_keyfile_dict = json.loads(os.getenv('JSON_KEYFILE_DICT'))
+json_keyfile_dict = json.loads(os.environ["JSON_KEYFILE_DICT"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json_keyfile_dict, scope)
 client = gspread.authorize(creds)
 
 
 # Open Spreadsheet based on sheet key
-spreadsheet_key = os.getenv('SPREADSHEET_KEY')
+spreadsheet_key = os.environ["SPREADSHEET_KEY"]
 spreadsheet = client.open_by_key(spreadsheet_key)
 
 
