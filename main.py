@@ -548,8 +548,8 @@ card_class3 = "red" if actual_week_average > weekly_average_expenses1 else ("yel
 
 msg = EmailMessage()
 msg['Subject'] = f'Food Expense Report {datetime.today().date().strftime("%m-%d-%Y")}'
-msg['From'] = 'lohan.rossi@hotmail.com'
-msg['To'] = 'lohan.rossi@hotmail.com'
+msg['From'] = os.environ["EMAIL_USERNAME"]
+msg['To'] = os.environ["EMAIL_SEND"]
 msg.set_content('This is an automated email. Please find the HTML version for better formatting.')
 
 # Path to your image

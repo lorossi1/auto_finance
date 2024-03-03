@@ -2,7 +2,7 @@ name: run main.py
 
 on:
   schedule: 
-    - cron: '*/35 * * * *' # run every day at 7 am '0 7 * * *''
+    - cron: '0 8 * * *' # run every day at 8 am 
 
 jobs:
     build:
@@ -26,6 +26,7 @@ jobs:
           env:
             EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
             EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+            EMAIL_SEND: ${{ secrets.EMAIL_SEND }}
             SPREADSHEET_KEY: ${{ secrets.SPREADSHEET_KEY }}
             JSON_KEYFILE_DICT: ${{ secrets.JSON_KEYFILE_DICT }}
           run: python main.py
