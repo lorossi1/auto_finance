@@ -745,3 +745,292 @@ server.login(username, password)
 # Send the email
 server.send_message(msg)
 server.quit()
+
+###################################################
+###################################################
+###################################################
+###################################################
+
+# Set up credentials
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+# creds = ServiceAccountCredentials.from_json_keyfile_name(os.getenv('TRY'), scope)
+json_keyfile_dict = json.loads(os.environ["JSON_KEYFILE_DICT"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(json_keyfile_dict, scope)
+client = gspread.authorize(creds)
+
+# Open Spreadsheet based on sheet key
+spreadsheet_key = os.environ["SPREADSHEET_KEY"]
+spreadsheet = client.open_by_key(spreadsheet_key)
+
+
+#Set Goal
+goal = 500000
+
+# Get income and Expense sheet data
+
+sheet_title = 'Income'  
+sheet = spreadsheet.worksheet(sheet_title)
+income_actual = sheet.get_all_records()
+income_actual = pd.DataFrame(income_actual)
+income_actual['Timestamp'] = pd.to_datetime(income_actual['Timestamp'])
+
+sheet_title = 'Expenses'  
+sheet = spreadsheet.worksheet(sheet_title)
+expenses_actual = sheet.get_all_records()
+expenses_actual = pd.DataFrame(expenses_actual)
+expenses_actual['Timestamp'] = pd.to_datetime(expenses_actual['Timestamp'])
+expenses_actual['Income Amount'] = -expenses_actual['Expense Amount']
+
+
+# make Simple line graph with all time actual income - actual expenses
+stacked_actual_income_expenses = pd.concat([income_actual[['Timestamp', 'Income Amount']], expenses_actual[['Timestamp', 'Income Amount']]], axis=0, ignore_index=True)
+stacked_actual_income_expenses = stacked_actual_income_expenses.sort_values(by='Timestamp')
+
+# Set the 'Date' column as the index
+stacked_actual_income_expenses.set_index('Timestamp', inplace=True)
+
+# Resample and sum by week (assuming week starts on Sunday)
+all_time_weekly_expenses = stacked_actual_income_expenses.resample('W-FRI').sum()
+all_time_weekly_expenses['Actual'] = all_time_weekly_expenses['Income Amount'].cumsum()
+
+
+# GRAPH
+plt.figure(figsize=(15, 6))
+plt.plot(all_time_weekly_expenses.index, all_time_weekly_expenses['Actual'])
+plt.title('All Time Capital')
+plt.xlabel('Week')
+plt.ylabel('Capital ($)')
+plt.grid(True)
+plt.savefig('all_time_capital.png')
+plt.close()
+
+# Make a simple line graph with This year actual income - actual expenses
+stacked_actual_income_expenses = pd.concat([income_actual[['Timestamp', 'Income Amount']], expenses_actual[['Timestamp', 'Income Amount']]], axis=0, ignore_index=True)
+stacked_actual_income_expenses = stacked_actual_income_expenses.sort_values(by='Timestamp')
+
+# Filter for this year (not dinamic TO DO)
+stacked_actual_income_expenses = stacked_actual_income_expenses[stacked_actual_income_expenses['Timestamp'] > '2023-12-31']
+
+# Set the 'Date' column as the index
+stacked_actual_income_expenses.set_index('Timestamp', inplace=True)
+
+# Resample and sum by week (assuming week starts on Sunday)
+this_year_weekly_expenses = stacked_actual_income_expenses
+this_year_weekly_expenses = stacked_actual_income_expenses.resample('W-FRI').sum()
+this_year_weekly_expenses['Actual'] = this_year_weekly_expenses['Income Amount'].cumsum()
+#
+
+# GRAPH
+plt.figure(figsize=(15, 6))
+plt.plot(this_year_weekly_expenses.index, this_year_weekly_expenses['Actual'])
+plt.title('This Year Capital')
+plt.xlabel('Week')
+plt.ylabel('Capital ($)')
+plt.grid(True)
+plt.savefig('this_year_capital.png')
+plt.close()
+
+# Calculated info
+# Get current capital
+current_capital = all_time_weekly_expenses['Actual'].iloc[len(all_time_weekly_expenses['Actual'])-1].round(2)
+
+# Calculate how far I am from current goal
+how_far_away = goal - current_capital
+
+# Calculate percentage complete from goal
+percentage_complete = f'{(current_capital/goal*100).round(2)}%'
+
+# Average per day, to calculate how many days until reach the goal
+how_many_days_since_start = all_time_weekly_expenses.reset_index()['Timestamp'].iloc[len(all_time_weekly_expenses['Actual'])-1] - all_time_weekly_expenses.reset_index()['Timestamp'].iloc[0]
+average_per_day = current_capital/how_many_days_since_start.days
+days_until_goal = int(goal/average_per_day)
+years_until_goal = days_until_goal/365
+
+# Table
+this_year_expenses = expenses_actual[expenses_actual['Timestamp'] > '2023-12-31'] #TO DO hardcoded
+
+a = expenses_actual.groupby(by=['Expense Type'])['Expense Amount'].sum().reset_index()
+b = this_year_expenses.groupby(by=['Expense Type'])['Expense Amount'].sum().reset_index()
+a = pd.merge(a, b, how='outer', on='Expense Type')
+a = a.rename(columns={"Expense Type": "KOE", "Expense Amount_x": "Spent Total", "Expense Amount_y": "Spent Year"})
+a['sum total'] = a['Spent Total'].sum()
+a['sum year'] = a['Spent Year'].sum()
+a['% Total'] = a['Spent Total']/a['sum total']
+a['% Year'] = a['Spent Year']/a['sum year']
+a = a.fillna(0)
+a = a.sort_values(by="Spent Total", ascending=False)
+totals = a.select_dtypes(include=['number']).sum()
+totals_row = pd.DataFrame([totals], index=['Total'])
+for col in a.columns.difference(totals.index):
+    totals_row[col] = pd.NA
+a = pd.concat([a, totals_row], axis=0)
+a['Spent Total'] = a['Spent Total'].map('${:,.2f}'.format)
+a['Spent Year'] = a['Spent Year'].map('${:,.2f}'.format)
+a['% Total'] = a['% Total'].map('{:.2%}'.format)
+a['% Year'] = a['% Year'].map('{:.2%}'.format)
+a['KOE'] = a['KOE'].fillna('TOTAL')
+expense_table = a[['KOE', 'Spent Year', '% Year', 'Spent Total', '% Total']]
+
+
+# Email portion
+
+
+css_styles = """
+<style>
+    .myDataFrame {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .myDataFrame, .myDataFrame th, .myDataFrame td {
+        border: 1px solid black;
+    }
+    .myDataFrame th, .myDataFrame td {
+        padding: 10px;
+        text-align: left;
+    }
+    .myDataFrame tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+    .myDataFrame th {
+        background-color: #9ba39b;
+        color: white;
+    }
+    .myDataFrame td {
+        text-align: center;
+    }
+    .card {
+        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+        transition: 0.3s;
+        width: 31%;
+        border-radius: 5px;
+        display: inline-block;
+        text-align: center;
+        font-family: Arial, sans-serif;
+        margin: 2px;
+    }
+
+    .container {
+        padding: 0px 0px;
+        margin-bottom: -15px;
+    }
+
+    .card_text{
+        font-size: 16px; 
+    }
+</style>
+"""
+
+
+expense_table_html = expense_table.to_html(index=False, classes='myDataFrame')
+
+msg = EmailMessage()
+msg['Subject'] = f'Total Expense Report {datetime.today().date().strftime("%m-%d-%Y")}'
+msg['From'] = os.environ["EMAIL_USERNAME"]
+msg['To'] = os.environ["EMAIL_SEND"]
+msg.set_content('This is an automated email. Please find the HTML version for better formatting.')
+
+# Path to your image
+all_time_capital = 'all_time_capital.png'
+mime_type, _ = mimetypes.guess_type(all_time_capital)
+mime_type, mime_subtype = mime_type.split('/')
+
+this_year_capital = 'this_year_capital.png'
+mime_type2, _ = mimetypes.guess_type(this_year_capital)
+mime_type2, mime_subtype2 = mime_type2.split('/')
+
+
+# Add the HTML version
+msg.add_alternative(f"""\
+<!DOCTYPE html>
+<html>
+    <head>
+        {css_styles}
+    </head>
+    <body>
+        <h2>TOTAL EXPENSE REPORT</h2>
+
+        <div class="card">
+            <div class="container">
+                <p class = "card_text">Current Capital</p>
+                <p class="number">${(current_capital):,.2f}</p>
+                
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="container">
+                <p class = "card_text">How far Away from Goal</p>
+                <p class="number">${(how_far_away):,.2f}</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="container">
+                <p class = "card_text">Percentage Complete</p>
+                <p class="number">{(percentage_complete)}</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="container">
+                <p class = "card_text">Capital Gain per Day</p>
+                <p class="number">${(average_per_day):,.2f}</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="container">
+                <p class = "card_text">Days until Goal</p>
+                <p class="number">{(days_until_goal):,.0f}</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="container">
+                <p class = "card_text">Years until Goal</p>
+                <p class="number">{(years_until_goal):.2f}</p>
+            </div>
+        </div>
+
+
+        <br><br><br><hr><br><br><br>
+
+        <h3>TOTAL TABLE</h3>
+        {expense_table_html}
+
+        <img src="cid:{Path(all_time_capital).name}" alt="Embedded Image">
+        
+        
+        <img src="cid:{Path(this_year_capital).name}" alt="Embedded Image">
+
+    </body>
+</html>
+""", subtype='html')
+
+# Read the image
+with open(all_time_capital, 'rb') as img:
+    msg.add_attachment(img.read(),
+                       maintype=mime_type,
+                       subtype=mime_subtype,
+                       cid=Path(all_time_capital).name)
+    
+# Read the image
+with open(this_year_capital, 'rb') as img:
+    msg.add_attachment(img.read(),
+                       maintype=mime_type2,
+                       subtype=mime_subtype2,
+                       cid=Path(this_year_capital).name)
+ 
+smtp_server = 'smtp.office365.com'
+port = 587  # For TLS
+username = email_username
+password = email_password
+
+# Connect to the server
+server = smtplib.SMTP(smtp_server, port)
+server.starttls()  # Upgrade the connection to secure
+server.login(username, password)
+
+# Send the email
+server.send_message(msg)
+server.quit()
